@@ -34,6 +34,18 @@ type ResponseInfo struct {
 	Body          string
 }
 
+type InitCustomAccessTokenOptions struct {
+	Ctx         context.Context
+	FromConfig  bool   // true
+	EndPoint    string // logto.m2mEndpoint
+	AppId       string // logto.m2mAppId
+	AppSecret   string // logto.m2mAppSecret
+	Resources   string // logto.m2mResources
+	RedisPrefix string // m2mToken@
+	ApiScopes   string // all
+
+}
+
 type M2MTokenResponse struct {
 	AccessToken string `json:"access_token"`
 	ExpireIn    int    `json:"expires_in"`
@@ -45,13 +57,24 @@ type M2MTokenResponse struct {
 type M2MAccessTokenManager struct {
 	ctx   context.Context
 	token *M2MTokenResponse
+	opts  InitCustomAccessTokenOptions
 }
 
 func (m *M2MAccessTokenManager) Init(ctx context.Context) {
 	if m.token == nil {
 		m.ctx = ctx
 		m.token = &M2MTokenResponse{}
-		m.token.InitAccessToken(ctx)
+		m.opts = InitCustomAccessTokenOptions{
+			Ctx:         ctx,
+			FromConfig:  true,
+			EndPoint:    "logto.m2mEndpoint",
+			AppId:       "logto.m2mAppId",
+			AppSecret:   "logto.m2mAppSecret",
+			Resources:   "logto.m2mResources",
+			RedisPrefix: "m2mToken_",
+			ApiScopes:   "all",
+		}
+		m.token.InitCustomAccessToken(m.opts)
 	}
 }
 
@@ -59,6 +82,7 @@ func (m *M2MAccessTokenManager) InitCustom(opts InitCustomAccessTokenOptions) {
 	if m.token == nil {
 		m.ctx = opts.Ctx
 		m.token = &M2MTokenResponse{}
+		m.opts = opts
 		m.token.InitCustomAccessToken(opts)
 	}
 }
@@ -68,7 +92,7 @@ func (m *M2MAccessTokenManager) GetToken() *M2MTokenResponse {
 		return nil
 	}
 	if isExped, _ := m.token.isExpired(); isExped {
-		m.token.InitAccessToken(m.ctx)
+		m.token.InitCustomAccessToken(m.opts)
 	}
 	return m.token
 }
@@ -197,18 +221,6 @@ func (token *M2MTokenResponse) InitAccessToken(ctx context.Context) error {
 		RedisPrefix: "m2mToken_",
 		ApiScopes:   "all",
 	})
-}
-
-type InitCustomAccessTokenOptions struct {
-	Ctx         context.Context
-	FromConfig  bool   // true
-	EndPoint    string // logto.m2mEndpoint
-	AppId       string // logto.m2mAppId
-	AppSecret   string // logto.m2mAppSecret
-	Resources   string // logto.m2mResources
-	RedisPrefix string // m2mToken@
-	ApiScopes   string // all
-
 }
 
 func (token *M2MTokenResponse) InitCustomAccessToken(opts InitCustomAccessTokenOptions) error {
