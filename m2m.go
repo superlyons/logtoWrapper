@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/gogf/gf/v2/container/gvar"
 	"io"
 	"log"
 	"net/http"
@@ -43,7 +44,8 @@ type InitCustomAccessTokenOptions struct {
 	Resources   string // logto.m2mResources
 	RedisPrefix string // m2mToken@
 	ApiScopes   string // all
-
+	RedisGet    func() (*gvar.Var, error)
+	RedisSet    func(tokenJsonStr []byte) error
 }
 
 type M2MTokenResponse struct {
@@ -239,11 +241,19 @@ func (token *M2MTokenResponse) InitCustomAccessToken(opts InitCustomAccessTokenO
 		resources = opts.Resources
 	}
 
-	resKey := resources
 	redis := g.Redis()
-	cM2MToken, _ := redis.Get(opts.Ctx, opts.RedisPrefix+resKey)
+	resKey := resources
+	var cM2MToken *gvar.Var
+	if opts.RedisGet != nil {
+		cM2MToken, _ = opts.RedisGet()
+	} else {
+		cM2MToken, _ = redis.Get(opts.Ctx, opts.RedisPrefix+resKey)
+	}
 	if cM2MToken != nil && cM2MToken.String() != "" {
-		json.Unmarshal([]byte(cM2MToken.String()), &token)
+		err := json.Unmarshal([]byte(cM2MToken.String()), &token)
+		if err != nil {
+			return err
+		}
 		expired, err := token.isExpired()
 		if err != nil {
 			return err
@@ -299,12 +309,25 @@ func (token *M2MTokenResponse) InitCustomAccessToken(opts InitCustomAccessTokenO
 	}
 	responseJSON, _ := json.MarshalIndent(responseInfo, "", "  ")
 	log.Println("response = ", string(responseJSON))
-	json.Unmarshal(responseBody, &token)
+	err := json.Unmarshal(responseBody, &token)
+	if err != nil {
+		return err
+	}
 	tokenJSONString, tokenJSONStrErr := json.Marshal(token)
 	if tokenJSONStrErr != nil {
 		return tokenJSONStrErr
 	}
-	redis.Set(opts.Ctx, opts.RedisPrefix+resKey, string(tokenJSONString))
+	if opts.RedisSet != nil {
+		err := opts.RedisSet(tokenJSONString)
+		if err != nil {
+			return err
+		}
+	} else {
+		_, err := redis.Set(opts.Ctx, opts.RedisPrefix+resKey, string(tokenJSONString))
+		if err != nil {
+			return err
+		}
+	}
 	result, _ := token.TokenFormat()
 	formatted, _ := json.MarshalIndent(result, "", "  ")
 	log.Printf("M2MToken Init From Request: %+v = %s\n", resources, formatted)
