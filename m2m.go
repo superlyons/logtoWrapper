@@ -244,10 +244,14 @@ func (token *M2MTokenResponse) InitCustomAccessToken(opts InitCustomAccessTokenO
 	redis := g.Redis()
 	resKey := resources
 	var cM2MToken *gvar.Var
+	var errRedis error
 	if opts.RedisGet != nil {
-		cM2MToken, _ = opts.RedisGet()
+		cM2MToken, errRedis = opts.RedisGet()
 	} else {
-		cM2MToken, _ = redis.Get(opts.Ctx, opts.RedisPrefix+resKey)
+		cM2MToken, errRedis = redis.Get(opts.Ctx, opts.RedisPrefix+resKey)
+	}
+	if errRedis != nil {
+		return errRedis
 	}
 	if cM2MToken != nil && cM2MToken.String() != "" {
 		err := json.Unmarshal([]byte(cM2MToken.String()), &token)
@@ -312,6 +316,9 @@ func (token *M2MTokenResponse) InitCustomAccessToken(opts InitCustomAccessTokenO
 	err := json.Unmarshal(responseBody, &token)
 	if err != nil {
 		return err
+	}
+	if token.AccessToken == "" {
+		return errors.New("token is empty")
 	}
 	tokenJSONString, tokenJSONStrErr := json.Marshal(token)
 	if tokenJSONStrErr != nil {
